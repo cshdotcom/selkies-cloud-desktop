@@ -1,0 +1,12 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=ZCode
+Name[zh_CN]=ZCode 终端
+Comment=Z.ai ZCode coding agent (TUI) — GLM Coding Agent Harness
+Comment[zh_CN]=Z.ai ZCode 编码智能体（终端交互模式）
+Exec=xfce4-terminal --title=ZCode -x zcode
+Icon=utilities-terminal
+Terminal=false
+Categories=Development;Utility;System;
+StartupNotify=true

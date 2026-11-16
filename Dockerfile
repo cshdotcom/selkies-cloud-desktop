@@ -263,7 +263,8 @@ ENV SELKIES_DESKTOP="false" \
     BROWSER="/usr/bin/microsoft-edge" \
     GTK_IM_MODULE="fcitx" \
     QT_IM_MODULE="fcitx" \
-    XMODIFIERS="@im=fcitx"
+    XMODIFIERS="@im=fcitx" \
+    XDG_MENU_PREFIX="xfce-"
 
 # HTTP / HTTPS / 内置 coTURN（WebRTC 中继，tcp+udp）
 EXPOSE 8080 8443 3478/tcp 3478/udp

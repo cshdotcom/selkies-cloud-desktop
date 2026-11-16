@@ -30,6 +30,9 @@ export XDG_CURRENT_DESKTOP="XFCE"
 export XDG_SESSION_DESKTOP="xfce"
 export XDG_SESSION_TYPE="x11"
 export DESKTOP_SESSION="xfce"
+# 上游 base 环境里残留 XDG_MENU_PREFIX=lxqt-，导致 XFCE 面板去找
+# menus/lxqt-applications.menu（不存在）报错；显式覆盖为 xfce-
+export XDG_MENU_PREFIX="xfce-"
 
 # dbus-run-session 提供会话总线；xfce4-session 负责拉起
 # xfwm4 / xfce4-panel / xfdesktop / xfce4-settings-daemon / fcitx5(XDG autostart)
