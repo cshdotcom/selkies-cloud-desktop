@@ -65,6 +65,34 @@ docker run -d --name selkies-cloud-desktop \
   ghcr.io/cshdotcom/selkies-cloud-desktop:latest
 ```
 
+> **国内拉取加速**（华为云镜像源，同步可能滞后数小时；最新 tag 拉不到时回 GHCR）：
+> 把镜像名换成 `swr.cn-north-4.myhuaweicloud.com/ddn-k8s/ghcr.io/cshdotcom/selkies-cloud-desktop:v1.1.2`
+
+#### 单端口最简部署（只开一个端口，适合反代 / 单口穿透 / 云主机只放行一个端口）
+
+```bash
+docker run -d --name selkies-cloud-desktop \
+  --shm-size=512m --memory=2g \
+  -p 1900:8080 \
+  -e SELKIES_BASIC_AUTH_USER=admin \
+  -e SELKIES_BASIC_AUTH_PASSWORD=你的密码 \
+  -e SELKIES_ALLOWED_ORIGINS=* \
+  -v selkies-home:/home/ubuntu \
+  -v selkies-edge-config:/home/ubuntu/.config/microsoft-edge \
+  -v selkies-edge-cache:/home/ubuntu/.cache/microsoft-edge \
+  -v selkies-zcode:/home/ubuntu/.zcode \
+  --restart unless-stopped \
+  ghcr.io/cshdotcom/selkies-cloud-desktop:v1.1.2
+```
+
+浏览器访问 `https://<主机>:1900`（自签证书，首次接受警告即可），不需要 8443/3478。
+
+> **关于 `SELKIES_ALLOWED_ORIGINS`**：Selkies 默认只放行**同源** WebSocket。
+> 走反向代理、域名访问或跨 IP 访问时，浏览器 Origin 与容器认知的源对不上，
+> 会出现“页面能打开但桌面黑屏/一直转圈”，日志刷
+> `Rejected WebSocket upgrade from disallowed Origin: 'https://你的域名'`。
+> 解决：`-e SELKIES_ALLOWED_ORIGINS=https://你的域名`（精确放行，多个逗号分隔）或 `*`（放行所有，仅内网用）。
+
 浏览器打开：
 
 | 地址 | 说明 |
@@ -105,8 +133,11 @@ docker compose up -d --build
 | `3478` | TCP+UDP | 内置 coTURN（WebRTC 跨 NAT 中继；同机房/局域网/端口直通场景可不开） |
 
 - 双端口由 `SELKIES_PORT=8080` + `SELKIES_HTTPS_PORT=8443` 实现，同一服务进程同时监听；
+- **单端口部署**：只映射 `-p 外部端口:8080` 也能正常工作（3478/8443 不映射时自动走 WebSockets 模式）；
+  浏览器访问用 `https://<主机>:端口`（自签证书，首次接受警告）；
 - WebSockets 传输（默认）只需 8080/8443 任一可达；WebRTC 传输（Web 面板可切换，双模默认开启）
-  在严格 NAT 下依赖 3478 中继或 `--network host`。
+  在严格 NAT 下依赖 3478 中继或 `--network host`；
+- 跨域 / 反代访问需配 `SELKIES_ALLOWED_ORIGINS`，详见环境变量表。
 
 ---
 
@@ -172,6 +203,7 @@ Selkies 的多连接模型：**任何人用同一地址再开一个标签页/浏
 | `SELKIES_MODE` | `websockets` | 传输模式：`websockets` / `webrtc` |
 | `SELKIES_ENABLE_DUAL_MODE` | `true` | 双模开关（Web 面板里可切换传输） |
 | `SELKIES_TURN_HOST` 等 | 自动 | 外部 TURN 配置；不配置时自动启用内置 coTURN（3478） |
+| `SELKIES_ALLOWED_ORIGINS` | 空（仅同源） | 允许的浏览器 Origin（逗号分隔）；`*` 放行所有。反代/跨 IP 访问出现“Rejected WebSocket upgrade from disallowed Origin”时设置 |
 
 ### 画质与资源（2G 优化默认值）
 
@@ -455,6 +487,10 @@ docker tag selkies-cloud-desktop ghcr.io/<你>/selkies-cloud-desktop:dev
 | zcode 提示未登录 | TUI 里 `/login`，或用 `ZCODE_MODEL`/`ZCODE_BASE_URL`/`ANTHROPIC_API_KEY` 环境变量 |
 | 中文无法输入 | `Ctrl+Space` 切换 fcitx5；托盘无图标时终端跑 `fcitx5 -d &`；确认输入焦点在应用内 |
 | 重建容器后软件丢了 | 等 pkg-persist 恢复完成（看 `~/persist/pkg-persist.log`），或手动 `pkg-persist restore` |
+| 页面能开但桌面黑屏/转圈，日志刷 `Rejected WebSocket upgrade from disallowed Origin` | 走反代/跨 IP 访问时 Origin 不匹配；设 `-e SELKIES_ALLOWED_ORIGINS=https://你的域名`（或 `*` 仅内网用）后重建容器 |
+| Applications 菜单报错 `lxqt-applications.menu not found` | v1.1.0 可能缺 `XDG_MENU_PREFIX=xfce-`；v1.1.2 已内置修复。临时加 `-e XDG_MENU_PREFIX=xfce-` 重建即可 |
+| 主机端口被占用 `address already in use` | 换一个空闲端口：`-p 1901:8080`；或 `ss -ltn \| grep :1900` 查谁占了 |
+| fcitx5 任务栏无图标 | 右键面板 → Add New Items → Status Notifier；v1.1.2 skel 已固化该插件 |
 
 ---
 
