@@ -46,7 +46,11 @@ snapshot() {
 
 save() {
   mkdir -p "${PERSIST_DIR}" 2>/dev/null || return 0
-  flock -w 600 "${LOCK}" snapshot
+  # flock 用 exec 调命令，无法调用 shell 函数；改用 FD 方式在子 shell 内上锁后调用
+  (
+    flock -w 600 9
+    snapshot
+  ) 9>"${LOCK}"
 }
 
 restore() {
