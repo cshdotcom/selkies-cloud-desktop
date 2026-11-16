@@ -68,12 +68,6 @@ jobs:
           test -f rootfs/etc/service/xsettingsd/run
           test -f rootfs/etc/service/pkg-persist/run
           test -f rootfs/etc/service/pkg-persist/finish
-          test -f rootfs/etc/service/zcode-web/run
-          test -f rootfs/etc/service/zcode-web/finish
-          test -f rootfs/etc/service/zcode-web-gate/run
-          test -f rootfs/etc/service/zcode-web-gate/finish
-          test -f rootfs/etc/zcode-web-gate/nginx.conf.template
-          test -f rootfs/usr/local/bin/zcode-web-open
           test -f rootfs/etc/xdg/mimeapps.list
           test -f rootfs/etc/xdg/autostart/fcitx5-autostart.desktop
           test -f rootfs/usr/local/bin/pkg-persist
@@ -173,7 +167,7 @@ jobs:
             ```bash
             docker run -d --name selkies-cloud-desktop \
               --shm-size=512m --memory=2g \
-              -p 8080:8080 -p 8443:8443 -p 8081:8081 -p 3478:3478/tcp -p 3478:3478/udp \
+              -p 8080:8080 -p 8443:8443 -p 3478:3478/tcp -p 3478:3478/udp \
               -e SELKIES_BASIC_AUTH_USER=admin \
               -e SELKIES_BASIC_AUTH_PASSWORD=你的密码 \
               -v selkies-home:/home/ubuntu \
@@ -181,6 +175,6 @@ jobs:
             ```
 
             随后浏览器打开 `https://<主机>:8443`（自签证书）或 `http://<主机>:8080`
-            进入云桌面；`http://<主机>:8081` 是 ZCode 网页端（同一套用户名密码登录）。
+            进入云桌面。
 
             完整文档（多人协作、持久化、zcode 配置、2G 调优）见仓库 [README](https://github.com/cshdotcom/selkies-cloud-desktop/blob/main/README.md)。

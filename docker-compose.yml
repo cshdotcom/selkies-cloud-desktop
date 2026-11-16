@@ -4,10 +4,9 @@
 #   cp .env.example .env   （或直接导出环境变量），然后：
 #   docker compose up -d
 #
-# 访问（三个网页入口，均需输入用户名+密码登录）：
+# 访问（两个网页入口，均需输入用户名+密码登录）：
 #   HTTP  http://<主机>:8080     云桌面（浏览器弹窗输入用户名+密码登录）
 #   HTTPS https://<主机>:8443     云桌面（自签证书，首次需在浏览器接受）
-#   zcode http://<主机>:8081     ZCode 网页端（默认同一套密码，可单独设置）
 # =============================================================================
 
 services:
@@ -29,7 +28,6 @@ services:
     ports:
       - "8080:8080"        # HTTP  （登录后即云桌面）
       - "8443:8443"        # HTTPS （自签证书，双端口同时开放）
-      - "8081:8081"        # zcode 网页端（独立密码登录的第二个网页入口）
       - "3478:3478"        # 内置 coTURN —— WebRTC 跨 NAT 中继（tcp）
       - "3478:3478/udp"    # 内置 coTURN（udp）
 
@@ -43,11 +41,6 @@ services:
       # 可选：只读观看密码 —— 用这个密码登录的人只能看、不能操作
       # （不设则所有登录者都是完整控制权限）
       SELKIES_BASIC_AUTH_VIEWONLY_PASSWORD: "${SELKIES_BASIC_AUTH_VIEWONLY_PASSWORD:-}"
-
-      # —— zcode 网页端（8081）登录：不设则自动复用上面那套用户名+密码 ——
-      # （一层密码走天下；需要给网页端单独设密码时才取消注释）
-      ZCODE_WEB_USER: "${ZCODE_WEB_USER:-}"
-      ZCODE_WEB_PASSWORD: "${ZCODE_WEB_PASSWORD:-}"
 
       # —— 桌面账户密码（容器内 sudo / 会话账户，与 Web 登录相互独立）——
       PASSWD: "${PASSWD:-mypasswd}"

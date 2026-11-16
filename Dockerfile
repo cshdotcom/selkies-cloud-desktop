@@ -11,8 +11,6 @@
 #   - 多人同时控制同一桌面（Selkies multi-peer，全员完整键鼠权限）
 #   - HTTP(8080) 与 HTTPS(8443, 自签证书) 双端口同时监听
 #   - BasicAuth 自定义用户名/密码登录（另支持只读观看密码）
-#   - zcode 网页端独立端口 8081：nginx 认证网关（BasicAuth 登录 +
-#     内层 Bearer token 双重防护），应用端与网页端同时运行
 #   - 数据持久化：家目录 / Edge 配置与缓存 / ZCode 专属目录
 #   - 2G 内存可运行（XFCE 无合成器 + 30fps 初始帧率 + 软编 x264）
 #   - 浏览器仅 Microsoft Edge（唯一默认浏览器）
@@ -52,7 +50,6 @@ SHELL ["/usr/bin/fakeroot", "--", "/bin/sh", "-c"]
 
 # -----------------------------------------------------------------------------
 # 1) XFCE lite 桌面 + 常用应用 + 中文输入法（fcitx5 拼音）+ CJK 字体补强
-#    + zcode 网页端认证网关（nginx-light 反代 + htpasswd）
 #    包名与上游 2.2.1 desktop addon 在 ubuntu26.04 上验证过的集合保持一致；
 #    所有包名已对照 archive.ubuntu.com resolute/resolute-updates 索引预检
 # -----------------------------------------------------------------------------
@@ -101,8 +98,6 @@ RUN set -eu; \
         less \
         locales \
         python3-pip \
-        nginx-light \
-        apache2-utils \
         adwaita-icon-theme \
         fonts-noto-cjk \
         fonts-noto-color-emoji \
@@ -193,16 +188,11 @@ RUN set -eu; \
 #    - /etc/service/xsettingsd/run  改为停靠（XFCE 自带 xfce4-settings-daemon
 #                                   提供 XSETTINGS，避免双管理器争抢 selection）
 #    - /etc/service/pkg-persist/    软件包持久化：定时快照 + 重建后自动恢复
-#    - /etc/service/zcode-web/       zcode --web 本地服务（127.0.0.1:3030 + token）
-#    - /etc/service/zcode-web-gate/  zcode 网页端认证网关（nginx :8081, BasicAuth
-#                                    + Bearer 注入，配置每次启动按 env 重新生成）
-#    - /etc/zcode-web-gate/nginx.conf.template   网关 nginx 配置模板
-#    - /usr/local/bin/zcode-web-open 桌面内打开 ZCode Web（自动带本机 token）
 #    - /etc/xdg/autostart/fcitx5    输入法自启（中文输入，Ctrl+Space 切换）
 #    - /usr/local/bin/pkg-persist   软件包持久化工具
 #    - /etc/xdg/mimeapps.list       默认浏览器 = Microsoft Edge
 #    - /etc/skel/...                首次开机家目录模板（关合成器等 2G 优化）
-#    - zcode 桌面快捷方式（TUI / 本地 Web 两种入口）
+#    - zcode 桌面快捷方式（终端 TUI）
 #    - scripts/desktop-init         ENTRYPOINT 包装：首次开机初始化 + 卷属主修复
 # -----------------------------------------------------------------------------
 COPY --chown=1000:1000 rootfs/ /
@@ -210,11 +200,8 @@ COPY --chown=1000:1000 scripts/desktop-init /usr/local/bin/desktop-init
 
 RUN set -eu; \
     chmod -f 755 /usr/local/bin/desktop-init /usr/local/bin/pkg-persist \
-        /usr/local/bin/zcode-web-open \
         /etc/service/desktop/run /etc/service/desktop/finish \
         /etc/service/pkg-persist/run /etc/service/pkg-persist/finish \
-        /etc/service/zcode-web/run /etc/service/zcode-web/finish \
-        /etc/service/zcode-web-gate/run /etc/service/zcode-web-gate/finish \
         /etc/service/xsettingsd/run; \
     install -d -m755 /home/ubuntu/Desktop /home/ubuntu/Documents /home/ubuntu/Downloads \
         /home/ubuntu/Pictures /home/ubuntu/Music /home/ubuntu/Videos \
@@ -269,21 +256,17 @@ SHELL ["/bin/sh", "-c"]
 # SELKIES_FRAMERATE     : 初始 30fps（区间 8-60），2G 内存/小核 CPU 的均衡默认值
 # SELKIES_COMMAND_ENABLED: 允许 Web 面板向会话内执行命令（完整权限开放）
 # *_IM_MODULE / XMODIFIERS: fcitx5 中文输入
-# ZCODE_WEB_PORT     : zcode 网页端认证网关监听端口（BasicAuth 登录后可达；
-#                      密码默认复用 SELKIES_BASIC_AUTH_PASSWORD，亦可单独设置
-#                      ZCODE_WEB_PASSWORD / ZCODE_WEB_USER）
 ENV SELKIES_DESKTOP="false" \
     SELKIES_COMMAND_ENABLED="true" \
     SELKIES_HTTPS_PORT="8443" \
     SELKIES_FRAMERATE="30,8-60" \
-    ZCODE_WEB_PORT="8081" \
     BROWSER="/usr/bin/microsoft-edge" \
     GTK_IM_MODULE="fcitx" \
     QT_IM_MODULE="fcitx" \
     XMODIFIERS="@im=fcitx"
 
-# HTTP / HTTPS / zcode 网页端网关 / 内置 coTURN（WebRTC 中继，tcp+udp）
-EXPOSE 8080 8081 8443 3478/tcp 3478/udp
+# HTTP / HTTPS / 内置 coTURN（WebRTC 中继，tcp+udp）
+EXPOSE 8080 8443 3478/tcp 3478/udp
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=90s --retries=3 \
     CMD timeout 3 bash -c "</dev/tcp/127.0.0.1/${SELKIES_PORT:-8080}" || exit 1
