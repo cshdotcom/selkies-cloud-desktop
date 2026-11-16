@@ -67,7 +67,7 @@ RUN set -eu; \
         pavucontrol \
         pulseaudio-utils \
         file-roller \
-        p7zip-full \
+        7zip \
         mpv \
         papers \
         gnome-calculator \
@@ -87,7 +87,7 @@ RUN set -eu; \
         zip \
         unzip \
         adwaita-icon-theme \
-        fonts-noto-color \
+        fonts-noto-color-emoji \
         gsettings-desktop-schemas \
         libglib2.0-bin \
         gtk-update-icon-cache \

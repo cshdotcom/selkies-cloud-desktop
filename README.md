@@ -295,7 +295,7 @@ sudo npm install -g @ljwei-stak/zcode-cli@latest   # 会话内直接升级到最
 | 浏览器 | **Microsoft Edge**（唯一浏览器，系统默认） |
 | AI 编码 | **zcode**（Z.ai GLM Coding Agent：TUI/Web/CLI） |
 | 终端 | xfce4-terminal（bash + 补全 + 中文输入法） |
-| 文件 | Thunar + 归档（file-roller、p7zip）、gvfs 网络位置 |
+| 文件 | Thunar + 归档（file-roller、7zip）、gvfs 网络位置 |
 | 文本/查看 | Mousepad（文本）、Ristretto（图片）、Papers（PDF） |
 | 媒体 | mpv（视频/音频）、PulseAudio 控制（pavucontrol） |
 | 系统工具 | 任务管理器、截图（xfce4-screenshooter）、htop、jq、计算器 |
