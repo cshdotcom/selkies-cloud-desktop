@@ -66,7 +66,11 @@ jobs:
           test -f rootfs/etc/service/desktop/run
           test -f rootfs/etc/service/desktop/finish
           test -f rootfs/etc/service/xsettingsd/run
+          test -f rootfs/etc/service/pkg-persist/run
+          test -f rootfs/etc/service/pkg-persist/finish
           test -f rootfs/etc/xdg/mimeapps.list
+          test -f rootfs/etc/xdg/autostart/fcitx5-autostart.desktop
+          test -f rootfs/usr/local/bin/pkg-persist
           test -f rootfs/usr/local/share/applications/zcode.desktop
           test -f .env.example
           echo "OK  project structure"

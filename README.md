@@ -14,13 +14,15 @@ base 容器 `ghcr.io/selkies-project/selkies/base:2.2.1-ubuntu26.04` 构建：
 - **HTTP + HTTPS 双端口**：`8080`（HTTP）与 `8443`（HTTPS，未配置证书时自动生成自签证书）同时监听
 - **自定义用户名/密码登录**：浏览器 BasicAuth 弹窗输入；另支持**只读观看密码**（给只需要"看"的同事）
 - **完整权限开放**：Web 面板命令通道开启、桌面账户带 sudo（fakeroot）、全员完整控制权
-- **数据持久化**：家目录（常规目录）、Edge 配置/缓存（软件目录）、`~/.zcode`（zcode 专属目录）独立成卷
+- **数据完整持久化**：家目录（常规目录）、Edge 配置/缓存（软件目录）、`~/.zcode`（zcode 专属目录）独立成卷；
+  **会话内装的软件包也持久化**（pkg-persist 自动快照 + 容器重建后开机自动重装）
+- **中文输入开箱即用**：fcitx5 + 拼音（`Ctrl+Space` 切换）+ Noto CJK 字体 + zh_CN.UTF-8 locale + LibreOffice 中文界面
 - **2G 内存可运行**：XFCE 关合成器 + 初始 30fps + 软编 x264（`mem_limit: 2g` 模板已内置）
 - **浏览器只要 Edge**：镜像内唯一浏览器为 Microsoft Edge（官方 apt 仓库，已设为系统默认）
 - **zcode 最新版**：Z.ai 官方仓库 [zai-org/ZCode](https://github.com/zai-org/ZCode)（Apache-2.0）的
   CLI 提取分发 `@ljwei-stak/zcode-cli`（TUI / `--web` / Agent 三合一，无 Electron）
-- **常用应用**：文件管理器、终端、文本/图片/PDF 查看器、归档工具、媒体播放、计算器、任务管理器、
-  截图工具、htop、git 客户端工具链等；中文输入法 fcitx5 拼音 + Noto CJK 字体开箱即用
+- **必要软件工具全家桶**：办公（LibreOffice 文字/表格/演示）、开发（git/tmux/vim/Node24/Python+pip）、
+  媒体（mpv）、归档（file-roller/7zip）、系统工具（htop/jq/wget/rsync/ssh 客户端）等
 - **GitHub Actions 编译镜像**：推送即构建，打 `v*` 标签自动发 Release
 
 > 镜像架构：`linux/amd64`（Microsoft Edge 与 zcode Linux CLI 均仅提供 x86_64）。
@@ -33,15 +35,16 @@ base 容器 `ghcr.io/selkies-project/selkies/base:2.2.1-ubuntu26.04` 构建：
 2. [端口说明](#端口说明)
 3. [登录与多人协作](#登录与多人协作)
 4. [环境变量](#环境变量)
-5. [数据持久化](#数据持久化)
-6. [zcode（Z.ai 编码 CLI）使用指南](#zcodezai-编码-cli使用指南)
-7. [2G 内存部署建议](#2g-内存部署建议)
-8. [常用应用清单](#常用应用清单)
-9. [多实例部署（每人独立桌面）](#多实例部署每人独立桌面)
-10. [GitHub Actions 构建与发行](#github-actions-构建与发行)
-11. [架构说明](#架构说明)
-12. [故障排查](#故障排查)
-13. [致谢与许可](#致谢与许可)
+5. [数据持久化（含软件包持久化）](#数据持久化)
+6. [中文输入与中文界面](#中文输入与中文界面)
+7. [zcode（Z.ai 编码 CLI）使用指南](#zcodezai-编码-cli使用指南)
+8. [2G 内存部署建议](#2g-内存部署建议)
+9. [常用应用清单](#常用应用清单)
+10. [多实例部署（每人独立桌面）](#多实例部署每人独立桌面)
+11. [GitHub Actions 构建与发行](#github-actions-构建与发行)
+12. [架构说明](#架构说明)
+13. [故障排查](#故障排查)
+14. [致谢与许可](#致谢与许可)
 
 ---
 
@@ -189,7 +192,7 @@ Selkies 的多连接模型：**任何人用同一地址再开一个标签页/浏
 
 | 卷 | 容器路径 | 保存内容 |
 | --- | --- | --- |
-| `home` | `/home/ubuntu` | **常规目录**：桌面/文档/下载/图片/音乐/视频 + 各应用 dotfiles |
+| `home` | `/home/ubuntu` | **常规目录**：桌面/文档/下载/图片/音乐/视频 + 各应用 dotfiles + `~/persist`（软件包清单） |
 | `edge-config` | `/home/ubuntu/.config/microsoft-edge` | **Edge 软件目录**：书签、密码、扩展、登录态、设置 |
 | `edge-cache` | `/home/ubuntu/.cache/microsoft-edge` | **Edge 缓存**（体积大、可丢弃，单独成卷便于只读/清理） |
 | `zcode-data` | `/home/ubuntu/.zcode` | **zcode 专属目录**：`/login` 认证态、会话、插件与模型配置 |
@@ -201,8 +204,52 @@ Selkies 的多连接模型：**任何人用同一地址再开一个标签页/浏
 - 使用 **bind mount** 时请确保宿主机目录属主为 `1000:1000`
   （`mkdir -p data/home && sudo chown -R 1000:1000 data`），或交给入口脚本自动修复（内置
   `sudo-root chown` 兜底）；
-- 会话内 `sudo apt install ...` 装的软件位于容器层：容器**重启**保留；容器**删除重建**后丢失
-  （数据卷不受影响）。需要长期保留的软件请写进 Dockerfile 重建镜像。
+
+### 软件包持久化（pkg-persist，自动）
+
+会话内 `sudo apt install ...` 装的软件默认位于容器层：容器**重启**保留；容器**删除重建**后丢失。
+本镜像内置 `pkg-persist` 机制补上这一环，实现**数据 + 软件双完整持久化**：
+
+| 动作 | 时机 | 说明 |
+| --- | --- | --- |
+| 快照 | 每 30 分钟 + 容器停止时 | 用户在基线之上新装的包写入 `~/persist/system-packages.txt`（家目录卷） |
+| 恢复 | 容器重建后开机 | 后台 `apt-get install` 清单中的包，日志见 `~/persist/pkg-persist.log` |
+
+常用命令（桌面终端内）：
+
+```bash
+pkg-persist list              # 查看已持久化的软件包清单
+pkg-persist save              # 立即快照当前新装的包
+pkg-persist remove gimp       # 从清单移除某个包（下次重建不再自动装）
+```
+
+> 注：恢复需联网且耗时与包数量成正比；重要数据请永远放在家目录卷内（桌面/文档/下载等）。
+
+---
+
+## 中文输入与中文界面
+
+### 输入法（开箱即用）
+
+- 桌面已内置 **fcitx5 + 拼音**（`fcitx5-chinese-addons`）并随会话自启；
+- 任意输入框按 **`Ctrl + Space`** 切换中英文；任务栏托盘可见 fcitx5 图标；
+- 输入法配置界面：开始菜单搜 "Fcitx 5 Configuration"（`fcitx5-config-qt`），可加双拼/五笔/仓颉等；
+- 覆盖范围：GTK（Edge/Thunar/Mousepad/LibreOffice）、Qt（Qt5/Qt6 应用）、XIM（终端等）均有前端模块；
+- 字体：Noto Sans CJK / 彩色 Emoji 已内置，中文显示不口口。
+
+### 中文界面（可选）
+
+镜像已生成 `zh_CN.UTF-8` locale 并预装 `language-pack-zh-hans` 与
+`libreoffice-l10n-zh-cn`（LibreOffice 中文界面默认即中文）。想整体切成中文界面：
+
+```bash
+# 写入 ~/.bashrc 后重启容器（或重新登录会话）
+echo 'export LANG=zh_CN.UTF-8' >> ~/.bashrc
+echo 'export LANGUAGE=zh_CN:zh' >> ~/.bashrc
+```
+
+或只给单个应用切中文：`LANG=zh_CN.UTF-8 libreoffice`。XFCE 面板等自身翻译随
+`LANG` 自动切换（上游镜像保留了应用的翻译文件）。
 
 ---
 
@@ -294,17 +341,19 @@ sudo npm install -g @ljwei-stak/zcode-cli@latest   # 会话内直接升级到最
 | 桌面 | XFCE 4（面板/桌面/设置守护/xfwm4 窗口管理） |
 | 浏览器 | **Microsoft Edge**（唯一浏览器，系统默认） |
 | AI 编码 | **zcode**（Z.ai GLM Coding Agent：TUI/Web/CLI） |
-| 终端 | xfce4-terminal（bash + 补全 + 中文输入法） |
+| 办公 | LibreOffice Writer/Calc/Impress（含中文界面包） |
+| 终端 | xfce4-terminal（bash + 补全 + 中文输入法）+ tmux |
 | 文件 | Thunar + 归档（file-roller、7zip）、gvfs 网络位置 |
-| 文本/查看 | Mousepad（文本）、Ristretto（图片）、Papers（PDF） |
+| 文本/查看 | Mousepad、Vim、Nano（文本）、Ristretto（图片）、Papers（PDF） |
 | 媒体 | mpv（视频/音频）、PulseAudio 控制（pavucontrol） |
-| 系统工具 | 任务管理器、截图（xfce4-screenshooter）、htop、jq、计算器 |
+| 系统工具 | 任务管理器、截图（xfce4-screenshooter）、htop、jq、file、less、计算器 |
 | 网络 | curl、wget、openssh-client、rsync、ping/ip |
-| 输入法 | fcitx5 + 拼音（`Ctrl+Space` 切换），Noto CJK 字体 |
-| 开发基础 | git、Node.js 24、npm、nano/vim-tiny、zip/unzip |
+| 输入法 | fcitx5 + 拼音（`Ctrl+Space` 切换）+ 配置工具，Noto CJK 字体 + 彩色 Emoji |
+| 开发 | git、Node.js 24、npm、Python 3 + pip、zip/unzip |
 
-> 需要 LibreOffice 等重应用时：会话内 `sudo apt install libreoffice-writer` 即装即用
-> （容器重启保留；要长期保留请写进 Dockerfile）。
+> 上面没有的软件（GIMP、Steam、IDE 等）任选一种方式补：
+> ① 会话内 `sudo apt install gimp`（pkg-persist 自动把 gimp 记入持久化清单，重建容器后自动重装）；
+> ② 要瘦身进镜像就写进 Dockerfile 重建。
 
 ---
 
@@ -398,8 +447,8 @@ docker tag selkies-cloud-desktop ghcr.io/<你>/selkies-cloud-desktop:dev
 | 画面卡顿 | Web 侧栏降低帧率/码率；或 `SELKIES_VIDEO_BITRATE=3000` 重启；跨 NAT 走 WebRTC + 3478 |
 | Edge 首次打开慢 | 首次初始化配置文件，之后由持久化卷加速 |
 | zcode 提示未登录 | TUI 里 `/login`，或用 `ZCODE_MODEL`/`ZCODE_BASE_URL`/`ANTHROPIC_API_KEY` 环境变量 |
-| 中文无法输入 | `Ctrl+Space` 切换 fcitx5；确认输入焦点在 GTK/Qt 应用内 |
-| 容器重建后丢软件 | 数据在卷里，apt 装的软件在容器层——长期软件请写进 Dockerfile |
+| 中文无法输入 | `Ctrl+Space` 切换 fcitx5；托盘无图标时终端跑 `fcitx5 -d &`；确认输入焦点在应用内 |
+| 重建容器后软件丢了 | 等 pkg-persist 恢复完成（看 `~/persist/pkg-persist.log`），或手动 `pkg-persist restore` |
 
 ---
 

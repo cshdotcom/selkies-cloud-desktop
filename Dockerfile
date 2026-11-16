@@ -50,7 +50,8 @@ SHELL ["/usr/bin/fakeroot", "--", "/bin/sh", "-c"]
 
 # -----------------------------------------------------------------------------
 # 1) XFCE lite 桌面 + 常用应用 + 中文输入法（fcitx5 拼音）+ CJK 字体补强
-#    包名与上游 2.2.1 desktop addon 在 ubuntu26.04 上验证过的集合保持一致
+#    包名与上游 2.2.1 desktop addon 在 ubuntu26.04 上验证过的集合保持一致；
+#    所有包名已对照 archive.ubuntu.com resolute/resolute-updates 索引预检
 # -----------------------------------------------------------------------------
 RUN set -eu; \
     apt-get clean; apt-get update; \
@@ -71,6 +72,10 @@ RUN set -eu; \
         mpv \
         papers \
         gnome-calculator \
+        libreoffice-writer \
+        libreoffice-calc \
+        libreoffice-impress \
+        libreoffice-l10n-zh-cn \
         bash-completion \
         openssh-client \
         rsync \
@@ -80,13 +85,21 @@ RUN set -eu; \
         iproute2 \
         iputils-ping \
         curl \
+        wget \
         gnupg \
         nano \
+        vim \
         vim-tiny \
+        tmux \
         jq \
         zip \
         unzip \
+        file \
+        less \
+        locales \
+        python3-pip \
         adwaita-icon-theme \
+        fonts-noto-cjk \
         fonts-noto-color-emoji \
         gsettings-desktop-schemas \
         libglib2.0-bin \
@@ -95,11 +108,16 @@ RUN set -eu; \
         gvfs-daemons \
         fcitx5 \
         fcitx5-chinese-addons \
+        fcitx5-config-qt \
+        fcitx5-frontend-gtk2 \
         fcitx5-frontend-gtk3 \
         fcitx5-frontend-gtk4 \
         fcitx5-frontend-qt5 \
         fcitx5-frontend-qt6 \
+        language-pack-zh-hans \
         ; \
+    # 生成 zh_CN.UTF-8 locale（应用中文界面 + 输入法所需）\
+    locale-gen zh_CN.UTF-8; \
     apt-get clean; \
     rm -rf /var/lib/apt/lists/* /var/cache/debconf/* /var/log/* /tmp/* /var/tmp/*
 
@@ -154,10 +172,24 @@ RUN set -eu; \
     rm -rf /var/lib/apt/lists/* /var/cache/debconf/* /var/log/* /tmp/* /var/tmp/*
 
 # -----------------------------------------------------------------------------
+# 3b) 软件包持久化基线：记录镜像构建完成时的 apt 手动安装包集合。
+#     pkg-persist（rootfs 内）用它计算“用户在会话内新装的包”，快照到
+#     ~/persist/system-packages.txt（家目录持久化卷），容器重建后开机自动重装。
+# -----------------------------------------------------------------------------
+RUN set -eu; \
+    apt-mark showmanual | LC_ALL=C sort -u > /opt/pkg-baseline.txt; \
+    [ -s /opt/pkg-baseline.txt ]; \
+    printf '# selkies-cloud-desktop package baseline (build time)\n' >> /opt/pkg-baseline.txt; \
+    wc -l /opt/pkg-baseline.txt
+
+# -----------------------------------------------------------------------------
 # 4) 本仓库的 rootfs 配置层：
 #    - /etc/service/desktop/        新增 s6 服务：Xvfb 就绪后启动完整 XFCE 会话
 #    - /etc/service/xsettingsd/run  改为停靠（XFCE 自带 xfce4-settings-daemon
 #                                   提供 XSETTINGS，避免双管理器争抢 selection）
+#    - /etc/service/pkg-persist/    软件包持久化：定时快照 + 重建后自动恢复
+#    - /etc/xdg/autostart/fcitx5    输入法自启（中文输入，Ctrl+Space 切换）
+#    - /usr/local/bin/pkg-persist   软件包持久化工具
 #    - /etc/xdg/mimeapps.list       默认浏览器 = Microsoft Edge
 #    - /etc/skel/...                首次开机家目录模板（关合成器等 2G 优化）
 #    - zcode 桌面快捷方式（TUI / 本地 Web 两种入口）
@@ -167,8 +199,9 @@ COPY --chown=1000:1000 rootfs/ /
 COPY --chown=1000:1000 scripts/desktop-init /usr/local/bin/desktop-init
 
 RUN set -eu; \
-    chmod -f 755 /usr/local/bin/desktop-init \
+    chmod -f 755 /usr/local/bin/desktop-init /usr/local/bin/pkg-persist \
         /etc/service/desktop/run /etc/service/desktop/finish \
+        /etc/service/pkg-persist/run /etc/service/pkg-persist/finish \
         /etc/service/xsettingsd/run; \
     install -d -m755 /home/ubuntu/Desktop /home/ubuntu/Documents /home/ubuntu/Downloads \
         /home/ubuntu/Pictures /home/ubuntu/Music /home/ubuntu/Videos \

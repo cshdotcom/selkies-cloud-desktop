@@ -1,0 +1,4 @@
+#!/bin/bash
+# 容器停止前的最后一次快照：兜住在两次定时快照之间装的软件包
+export HOME="${HOME:-/home/ubuntu}"
+pkg-persist save

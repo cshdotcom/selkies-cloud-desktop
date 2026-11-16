@@ -1,0 +1,24 @@
+#!/bin/bash
+# =============================================================================
+# s6 服务：软件包持久化（pkg-persist）
+#
+# 启动：若 ~/persist/system-packages.txt 有内容（容器重建场景），后台重装
+#       用户上次装的软件包（日志 ~/persist/pkg-persist.log）
+# 循环：每 30 分钟快照一次会话内新装的 apt 包到清单
+# 停止：finish 钩子再快照一次，兜住容器停止前的最后变更
+# =============================================================================
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/runtime-ubuntu}"
+export HOME="${HOME:-/home/ubuntu}"
+
+until [ -f "${XDG_RUNTIME_DIR}/container-env" ]; do sleep 0.5; done
+
+# 容器重建后：后台恢复用户安装过的软件（apt 更新+安装可能较慢，不阻塞会话启动）
+if [ -s "${HOME}/persist/system-packages.txt" ]; then
+  ( pkg-persist restore ) &
+fi
+
+echo "[pkg-persist] watching user-installed packages (snapshot every 30 min)"
+while true; do
+  pkg-persist save
+  sleep 1800
+done

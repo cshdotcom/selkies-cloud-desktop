@@ -1,0 +1,73 @@
+#!/bin/bash
+# =============================================================================
+# pkg-persist —— 会话内安装的 apt 软件包持久化工具
+#
+# 背景：镜像内 apt 装的软件位于容器层，容器重启保留、**删除重建后丢失**
+#       （数据卷不受影响）。本工具把用户在会话内新装的软件包清单持续快照到
+#       ~/persist/system-packages.txt（位于家目录持久化卷内），容器重建后
+#       开机自动重装，实现"数据 + 软件"双完整持久化。
+#
+# 原理：
+#   /opt/pkg-baseline.txt        镜像构建完成时的 apt 手动安装包基线（只读）
+#   ~/persist/system-packages.txt 用户在基线之上追加的包（自动维护）
+#
+# 用法：
+#   pkg-persist save      立即快照当前用户安装的包（服务每 30 分钟自动执行）
+#   pkg-persist restore   后台重装清单中的包（开机时服务自动执行）
+#   pkg-persist list      查看当前持久化清单
+#   pkg-persist remove <pkg> 从清单中移除某个包（下次重建不再自动安装）
+# =============================================================================
+set -u
+
+BASELINE="/opt/pkg-baseline.txt"
+PERSIST_DIR="${HOME}/persist"
+LIST="${PERSIST_DIR}/system-packages.txt"
+LOG="${PERSIST_DIR}/pkg-persist.log"
+LOCK="${PERSIST_DIR}/.lock"
+
+log() { printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" >>"${LOG}" 2>/dev/null; }
+
+snapshot() {
+  # 基线之上的用户包 = 当前 manual - 基线；与旧清单取并集，
+  # 保证 restore 过程中（部分包尚未装完）快照不会丢条目
+  apt-mark showmanual 2>/dev/null | LC_ALL=C sort -u > /tmp/.pkg-now.$$ || return 1
+  {
+    if [ -s "${LIST}" ]; then
+      comm -12 /tmp/.pkg-now.$$ "${LIST}" 2>/dev/null
+      comm -13 "${BASELINE}" /tmp/.pkg-now.$$ 2>/dev/null
+    else
+      comm -13 "${BASELINE}" /tmp/.pkg-now.$$ 2>/dev/null
+    fi | grep -v '^#' | grep -v '^$' | LC_ALL=C sort -u
+  } >"${LIST}.new"
+  mv -f "${LIST}.new" "${LIST}"
+  rm -f /tmp/.pkg-now.$$
+  log "saved $(wc -l <"${LIST}" 2>/dev/null || echo 0) packages"
+}
+
+save() {
+  mkdir -p "${PERSIST_DIR}" 2>/dev/null || return 0
+  flock -w 600 "${LOCK}" snapshot
+}
+
+restore() {
+  mkdir -p "${PERSIST_DIR}" 2>/dev/null || return 0
+  [ -s "${LIST}" ] || { log "no packages to restore"; return 0; }
+  local pkgs
+  pkgs="$(grep -v '^#' "${LIST}" | grep -v '^$' | tr '\n' ' ')"
+  [ -n "${pkgs}" ] || { log "no packages to restore"; return 0; }
+  log "restoring: ${pkgs}"
+  if command -v apt-get >/dev/null 2>&1; then
+    apt-get update >>"${LOG}" 2>&1
+    # shellcheck disable=SC2086
+    apt-get install -y --no-install-recommends ${pkgs} >>"${LOG}" 2>&1 \
+      && log "restore done" || log "restore had failures (see above)"
+  fi
+}
+
+case "${1:-}" in
+  save)    save ;;
+  restore) restore ;;
+  list)    cat "${LIST}" 2>/dev/null ;;
+  remove)  shift; for p in "$@"; do sed -i "/^${p}$/d" "${LIST}" 2>/dev/null; done; log "manual remove: $*" ;;
+  *)       echo "usage: pkg-persist save|restore|list|remove <pkg>..."; exit 1 ;;
+esac

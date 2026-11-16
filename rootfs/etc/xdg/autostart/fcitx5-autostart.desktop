@@ -1,0 +1,16 @@
+[Desktop Entry]
+Type=Application
+Name=Fcitx 5
+Name[zh_CN]=Fcitx 5 输入法
+GenericName=Input Method
+GenericName[zh_CN]=输入法
+Comment=Start input method (Chinese input via Ctrl+Space)
+Comment[zh_CN]=启动输入法（Ctrl+Space 切换中英文）
+Exec=fcitx5 -d
+Icon=fcitx
+Terminal=false
+Categories=System;Utility;
+X-GNOME-Autostart-Phase=Applications
+X-GNOME-AutostartNotify=false
+X-KDE-autostart-after=panel
+X-KDE-StartupNotify=false

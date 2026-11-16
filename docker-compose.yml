@@ -58,7 +58,9 @@ services:
       # ANTHROPIC_API_KEY: "sk-你的Z.ai-Key"
 
     volumes:
-      # 常规目录：整个家目录（桌面/文档/下载/图片/音乐 + 各类应用 dotfiles）
+      # 常规目录：整个家目录（桌面/文档/下载/图片/音乐 + 各类应用 dotfiles）。
+      # 含 ~/persist：会话内 apt 装的软件包清单（pkg-persist 每 30 分钟自动快照，
+      # 容器重建后开机自动重装，实现数据 + 软件双完整持久化）
       - home:/home/ubuntu
       # Edge 软件目录：配置（书签/密码/扩展/登录态）+ 缓存，独立成卷
       - edge-config:/home/ubuntu/.config/microsoft-edge
