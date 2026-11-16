@@ -1,0 +1,14 @@
+#!/bin/bash
+# =============================================================================
+# 桌面内打开 ZCode Web 界面（开始菜单 → ZCode Web）
+#
+# 优先带本容器随机 token 直连本地服务 127.0.0.1:3030（已在桌面会话内，
+# 免二次输入密码）；token 文件不存在时回退到认证网关 8081（弹窗登录）。
+# =============================================================================
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/runtime-ubuntu}"
+TOKEN="$(cat "${XDG_RUNTIME_DIR}/zcode-web-token" 2>/dev/null || true)"
+
+if [ -n "${TOKEN}" ]; then
+  exec microsoft-edge --new-window "http://127.0.0.1:3030/?token=${TOKEN}"
+fi
+exec microsoft-edge --new-window "http://127.0.0.1:8081/"

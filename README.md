@@ -12,7 +12,10 @@ base 容器 `ghcr.io/selkies-project/selkies/base:2.2.1-ubuntu26.04` 构建：
 
 - **多人同时控制**：所有人连同一桌面，各自键鼠可**同时**操作、互见对方光标（multi-peer，输入权限由服务端强制执行）
 - **HTTP + HTTPS 双端口**：`8080`（HTTP）与 `8443`（HTTPS，未配置证书时自动生成自签证书）同时监听
-- **自定义用户名/密码登录**：浏览器 BasicAuth 弹窗输入；另支持**只读观看密码**（给只需要"看"的同事）
+- **zcode 网页端独立端口**：`8081`——应用端（云桌面里的 TUI）与网页端同时运行；
+  nginx 认证网关双重防护：**浏览器弹窗输入用户名+密码**（BasicAuth，默认与桌面同一套密码）
+  + 内层随机 Bearer token（自动注入，用户无感知）
+- **自定义用户名/密码登录**：三个网页入口（8080/8443/8081）均需密码登录；另支持**只读观看密码**（给只需要"看"的同事）
 - **完整权限开放**：Web 面板命令通道开启、桌面账户带 sudo（fakeroot）、全员完整控制权
 - **数据完整持久化**：家目录（常规目录）、Edge 配置/缓存（软件目录）、`~/.zcode`（zcode 专属目录）独立成卷；
   **会话内装的软件包也持久化**（pkg-persist 自动快照 + 容器重建后开机自动重装）
@@ -55,7 +58,7 @@ base 容器 `ghcr.io/selkies-project/selkies/base:2.2.1-ubuntu26.04` 构建：
 ```bash
 docker run -d --name selkies-cloud-desktop \
   --shm-size=512m --memory=2g \
-  -p 8080:8080 -p 8443:8443 -p 3478:3478/tcp -p 3478:3478/udp \
+  -p 8080:8080 -p 8443:8443 -p 8081:8081 -p 3478:3478/tcp -p 3478:3478/udp \
   -e SELKIES_BASIC_AUTH_USER=admin \
   -e SELKIES_BASIC_AUTH_PASSWORD=你的密码 \
   -v selkies-home:/home/ubuntu \
@@ -69,10 +72,12 @@ docker run -d --name selkies-cloud-desktop \
 
 | 地址 | 说明 |
 | --- | --- |
-| `http://<主机>:8080` | HTTP 入口 |
-| `https://<主机>:8443` | HTTPS 入口（自签证书，首次访问在浏览器接受即可） |
+| `http://<主机>:8080` | 云桌面 HTTP 入口（弹窗输入用户名+密码） |
+| `https://<主机>:8443` | 云桌面 HTTPS 入口（自签证书，首次访问在浏览器接受即可） |
+| `http://<主机>:8081` | **ZCode 网页端**（默认同一套用户名+密码登录） |
 
-浏览器弹出登录框 → 输入自定义的**用户名 + 密码** → 进入 XFCE 云桌面。
+浏览器弹出登录框 → 输入自定义的**用户名 + 密码** → 进入 XFCE 云桌面；
+`8081` 登录后直接进入 ZCode 的网页版编码界面（与云桌面里的 zcode 共用登录态与工作区）。
 
 > 剪贴板、麦克风、摄像头功能在浏览器侧需要安全上下文（HTTPS 或 `localhost`）；
 > 想用这些能力请走 `https://<主机>:8443`。
@@ -102,11 +107,13 @@ docker compose up -d --build
 | --- | --- | --- |
 | `8080` | HTTP | 云桌面 Web 入口（登录 + WebSockets/WebRTC 流） |
 | `8443` | HTTPS | 云桌面 Web 入口（自签证书；配置真实证书见环境变量表） |
+| `8081` | HTTP | **ZCode 网页端**：nginx 认证网关（BasicAuth 登录 → 代理到仅监听本机的 zcode Web 服务） |
 | `3478` | TCP+UDP | 内置 coTURN（WebRTC 跨 NAT 中继；同机房/局域网/端口直通场景可不开） |
 
 - 双端口由 `SELKIES_PORT=8080` + `SELKIES_HTTPS_PORT=8443` 实现，同一服务进程同时监听；
 - WebSockets 传输（默认）只需 8080/8443 任一可达；WebRTC 传输（Web 面板可切换，双模默认开启）
-  在严格 NAT 下依赖 3478 中继或 `--network host`。
+  在严格 NAT 下依赖 3478 中继或 `--network host`；
+- `8081` 网关安全模型见 [zcode 网页端](#zcode-网页端8081独立密码登录) 一节。
 
 ---
 
@@ -159,6 +166,11 @@ Selkies 的多连接模型：**任何人用同一地址再开一个标签页/浏
 | `SELKIES_BASIC_AUTH_USER` | `admin`（compose） | Web 登录**用户名**（可自定义） |
 | `SELKIES_BASIC_AUTH_PASSWORD` | 必填（compose） | Web 登录**密码**（可自定义） |
 | `SELKIES_BASIC_AUTH_VIEWONLY_PASSWORD` | 空 | 只读观看密码（不设则全员完整控制） |
+| `ZCODE_WEB_USER` | 复用 `SELKIES_BASIC_AUTH_USER` | zcode 网页端（8081）登录用户名 |
+| `ZCODE_WEB_PASSWORD` | 复用 `SELKIES_BASIC_AUTH_PASSWORD` | zcode 网页端（8081）登录密码；两者均未设时 8081 拒绝放行 |
+| `ZCODE_WEB_PORT` | `8081` | zcode 网页端网关监听端口 |
+| `ZCODE_WEB_TOKEN` | 每次启动随机 | zcode 内层 token（固定指定可自义；默认随机更安全） |
+| `ZCODE_WEB_WORKSPACE` | `~/workspace` | zcode 网页端默认工作区（在家目录持久化卷内） |
 | `PASSWD` | `mypasswd` | 容器内桌面账户密码（sudo 用） |
 
 ### 网络 / 端口 / 证书
@@ -295,11 +307,33 @@ export ZCODE_BASE_URL="https://open.bigmodel.cn/api/anthropic"
 
 ```bash
 zcode                       # TUI 交互（云桌面里最常用）
-zcode --web                 # 本地 Web 界面（自动开空闲端口，配 --host 0.0.0.0 供局域网访问）
 zcode -p "解释这个仓库的结构" --mode plan   # 单次非交互调用
 zcode doctor                # 运行环境自检
 zcode --version             # 版本
 ```
+
+### zcode 网页端（8081，独立密码登录）
+
+除了云桌面里的终端 TUI（应用端），镜像同时常驻一个 **ZCode 网页端**（第二个网页入口）：
+
+```text
+浏览器 ──① BasicAuth 弹窗输用户名+密码──▶ nginx 认证网关 :8081 ──② 注入随机 Bearer token──▶ zcode --web（仅监听 127.0.0.1:3030）
+```
+
+- **打开方式**：`http://<主机>:8081` → 浏览器弹窗输入用户名+密码 → 进入 ZCode 网页版界面；
+- **一套密码走天下**：默认复用 `SELKIES_BASIC_AUTH_USER/PASSWORD`；需要单独密码时设
+  `ZCODE_WEB_USER` / `ZCODE_WEB_PASSWORD`（改后重启容器生效）；
+- **双层认证**：外层 nginx BasicAuth（bcrypt 哈希校验，未登录连静态资源都拿不到）
+  + 内层 zcode token（每次容器启动随机生成，网关自动注入，用户无感知）；
+- **不设密码不放行**：`ZCODE_WEB_PASSWORD` 与 `SELKIES_BASIC_AUTH_PASSWORD` 均未设时，
+  网关直接停靠，8081 拒绝任何流量（zcode 本体仍仅监听本机回环，不存在裸奔入口）；
+- **长连接支持**：网关已透传 WebSocket 升级与流式响应（1 小时空闲超时），对话/流式输出正常；
+- **与云桌面同源**：两端共用 `~/.zcode` 登录态与 `~/workspace` 工作区（都在持久化卷内），
+  桌面里开始的任务在网页端也能接着看；
+- 云桌面内部：开始菜单 → **ZCode Web** 快捷方式会自动带本机 token 直接打开（免二次输密码）。
+
+> 安全提示：8081 为 HTTP（与 8080 同级）。如需加密，建议在前面套一层自己的 TLS 反代
+> （或用 Cloudflare Tunnel / frp 等带 TLS 的入口）再对外。
 
 ### 升级与更换发行渠道
 
@@ -368,7 +402,7 @@ services:
     image: ghcr.io/cshdotcom/selkies-cloud-desktop:latest
     mem_limit: 2g
     shm_size: 512m
-    ports: [ "8101:8080", "8444:8443" ]
+    ports: [ "8101:8080", "8444:8443", "8181:8081" ]
     environment:
       SELKIES_BASIC_AUTH_USER: alice
       SELKIES_BASIC_AUTH_PASSWORD: "${ALICE_PASSWD}"
@@ -378,7 +412,7 @@ services:
     image: ghcr.io/cshdotcom/selkies-cloud-desktop:latest
     mem_limit: 2g
     shm_size: 512m
-    ports: [ "8102:8080", "8445:8443" ]
+    ports: [ "8102:8080", "8445:8443", "8182:8081" ]
     environment:
       SELKIES_BASIC_AUTH_USER: bob
       SELKIES_BASIC_AUTH_PASSWORD: "${BOB_PASSWD}"
@@ -428,6 +462,8 @@ docker tag selkies-cloud-desktop ghcr.io/<你>/selkies-cloud-desktop:dev
 │  · xsettingsd 服务停靠（xfce4-settings-daemon 接管 XSETTINGS）   │
 │  · Microsoft Edge（apt 官方源 + 启动器加固 + 系统默认浏览器）     │
 │  · Node.js 24 + zcode CLI（/opt/zcode，~/.zcode 持久化）         │
+│  · zcode --web 本地服务（127.0.0.1:3030 + token）                  │
+│  · nginx 认证网关 :8081（BasicAuth → Bearer 注入 → 3030）         │
 │  · fcitx5 拼音 + Noto CJK + 常用应用                              │
 │  · ENTRYPOINT 包装 desktop-init：首次开机铺模板 / 卷属主修复      │
 └─────────────────────────────────────────────────────────────────┘
@@ -447,6 +483,7 @@ docker tag selkies-cloud-desktop ghcr.io/<你>/selkies-cloud-desktop:dev
 | 画面卡顿 | Web 侧栏降低帧率/码率；或 `SELKIES_VIDEO_BITRATE=3000` 重启；跨 NAT 走 WebRTC + 3478 |
 | Edge 首次打开慢 | 首次初始化配置文件，之后由持久化卷加速 |
 | zcode 提示未登录 | TUI 里 `/login`，或用 `ZCODE_MODEL`/`ZCODE_BASE_URL`/`ANTHROPIC_API_KEY` 环境变量 |
+| zcode 网页端 8081 打不开 | `docker logs` 里搜 `zcode-web-gate`：未设密码时网关按设计停靠（设 `ZCODE_WEB_PASSWORD` 或 `SELKIES_BASIC_AUTH_PASSWORD` 后重启）；设了密码仍打不开则看网关日志是否端口冲突 |
 | 中文无法输入 | `Ctrl+Space` 切换 fcitx5；托盘无图标时终端跑 `fcitx5 -d &`；确认输入焦点在应用内 |
 | 重建容器后软件丢了 | 等 pkg-persist 恢复完成（看 `~/persist/pkg-persist.log`），或手动 `pkg-persist restore` |
 

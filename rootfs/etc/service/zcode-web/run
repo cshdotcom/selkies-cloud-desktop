@@ -1,0 +1,43 @@
+#!/bin/bash
+# =============================================================================
+# s6 服务：ZCode Web 应用端（zcode --web 本地服务）
+#
+# - 仅监听容器内回环 127.0.0.1:3030，不对容器外直接开放；
+# - 开启 zcode 内建 token 认证（/ws 与 /api/* 无有效 token 一律 401），
+#   token 默认每次容器启动随机生成（ZCODE_WEB_TOKEN 可固定指定），
+#   写入 ${XDG_RUNTIME_DIR}/zcode-web-token 供认证网关读取注入；
+# - 对外发布由 /etc/service/zcode-web-gate（nginx + BasicAuth）在 8081 完成；
+# - 工作区默认 ~/workspace（位于家目录持久化卷内，重建容器不丢代码）。
+# =============================================================================
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/runtime-ubuntu}"
+
+# 等待 container-entrypoint.sh 写入的共享会话环境（与 desktop 服务同一模式）
+until [ -f "${XDG_RUNTIME_DIR}/container-env" ]; do sleep 0.5; done
+# shellcheck disable=SC1091  # 由 container-entrypoint.sh 在启动时生成
+. "${XDG_RUNTIME_DIR}/container-env"
+export HOME="${HOME:-/home/ubuntu}"
+
+TOKEN_FILE="${XDG_RUNTIME_DIR}/zcode-web-token"
+mkdir -p "${XDG_RUNTIME_DIR}"
+
+if [ ! -s "${TOKEN_FILE}" ]; then
+  umask 077
+  if [ -n "${ZCODE_WEB_TOKEN:-}" ]; then
+    printf '%s' "${ZCODE_WEB_TOKEN}" > "${TOKEN_FILE}"
+  else
+    head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n' > "${TOKEN_FILE}"
+  fi
+fi
+chmod 600 "${TOKEN_FILE}" 2>/dev/null || true
+ZCODE_WEB_TOKEN="$(cat "${TOKEN_FILE}")"
+
+WORKSPACE="${ZCODE_WEB_WORKSPACE:-${HOME}/workspace}"
+mkdir -p "${WORKSPACE}" 2>/dev/null || true
+
+echo "[zcode-web] starting zcode --web on 127.0.0.1:3030 (workspace: ${WORKSPACE})"
+exec zcode --web \
+  --host 127.0.0.1 \
+  --port 3030 \
+  --workspace "${WORKSPACE}" \
+  --no-open \
+  --token "${ZCODE_WEB_TOKEN}"
