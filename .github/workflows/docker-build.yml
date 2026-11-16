@@ -4,7 +4,7 @@ name: build-image
 # Selkies Cloud Desktop —— GitHub Actions 构建与发行
 #
 #   * push 到 main   : 构建镜像 → 推 GHCR（tag: latest + sha）
-#   * push v* 标签   : 构建镜像 → 推 GHCR（tag: 1.0.0 / 1.0）→ 创建 GitHub Release
+#   * push v* 标签   : 构建镜像 → 推 GHCR（tag: v1.0.0 / 1.0.0 / 1.0）→ 创建 GitHub Release
 #   * pull_request   : 仅构建不推送（校验 PR 不破坏镜像）
 #   * workflow_dispatch: 手动触发
 #
@@ -102,6 +102,7 @@ jobs:
           images: ${{ env.IMAGE_NAME }}
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
+            type=ref,event=tag
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=sha,enable={{is_default_branch}}

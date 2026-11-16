@@ -432,7 +432,7 @@ volumes: { alice-home: {}, alice-edge-cfg: {}, alice-edge-cache: {}, alice-zcode
 | 触发 | 行为 |
 | --- | --- |
 | push 到 `main` | lint → 构建镜像 → 推送 `ghcr.io/cshdotcom/selkies-cloud-desktop:latest`（+ `sha-xxxxxxx`） |
-| push `v*` 标签 | 同上构建推送 `v1.0.0` / `1.0` 版本 tag → **自动创建 GitHub Release**（含变更说明） |
+| push `v*` 标签 | 同上构建推送 `v1.0.0` / `1.0.0` / `1.0` 版本 tag → **自动创建 GitHub Release**（含变更说明） |
 | Pull Request | lint → 仅构建不推送（保证 PR 不破坏镜像） |
 | 手动 workflow_dispatch | 同 main |
 
