@@ -1,0 +1,37 @@
+#!/bin/bash
+# =============================================================================
+# s6 服务：XFCE 完整桌面会话
+#
+# Selkies base 在 SELKIES_WM/SELKIES_DESKTOP 均关闭时只启动显示服务器，
+# 本服务在其 Xvfb 就绪后拉起完整 XFCE 会话（xfwm4 + 面板 + 桌面 + 设置守护）。
+# 会话内所有连接 Selkies 页面的用户共享同一桌面并可同时键鼠控制
+# （multi-peer，输入权限由服务端强制执行）。
+# =============================================================================
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/runtime-ubuntu}"
+
+# 等待 container-entrypoint.sh 写入的共享会话环境（含 interposer LD_PRELOAD）
+until [ -f "${XDG_RUNTIME_DIR}/container-env" ]; do sleep 0.5; done
+# shellcheck disable=SC1091  # 由 container-entrypoint.sh 在启动时生成
+. "${XDG_RUNTIME_DIR}/container-env"
+
+export DISPLAY="${DISPLAY:-:20}"
+
+# 本镜像的桌面为 X11 方案；显式切到 Wayland 后端时本服务停靠（默认不启用）
+if [ "${SELKIES_WAYLAND:-false}" = "true" ]; then
+  echo "[desktop] Wayland backend active; XFCE X11 session stays parked (X11 is this image's default)"
+  exec sleep infinity
+fi
+
+# 等待 Xvfb 的 socket（与上游 selkies-entrypoint 相同的等待方式）
+until [ -S "/tmp/.X11-unix/X${DISPLAY#*:}" ]; do sleep 0.5; done
+
+# 标准桌面会话环境
+export XDG_CURRENT_DESKTOP="XFCE"
+export XDG_SESSION_DESKTOP="xfce"
+export XDG_SESSION_TYPE="x11"
+export DESKTOP_SESSION="xfce"
+
+# dbus-run-session 提供会话总线；xfce4-session 负责拉起
+# xfwm4 / xfce4-panel / xfdesktop / xfce4-settings-daemon / fcitx5(XDG autostart)
+echo "[desktop] starting XFCE session on display ${DISPLAY}"
+exec dbus-run-session -- xfce4-session

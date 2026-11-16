@@ -1,0 +1,174 @@
+name: build-image
+
+# =============================================================================
+# Selkies Cloud Desktop —— GitHub Actions 构建与发行
+#
+#   * push 到 main   : 构建镜像 → 推 GHCR（tag: latest + sha）
+#   * push v* 标签   : 构建镜像 → 推 GHCR（tag: 1.0.0 / 1.0）→ 创建 GitHub Release
+#   * pull_request   : 仅构建不推送（校验 PR 不破坏镜像）
+#   * workflow_dispatch: 手动触发
+#
+# 镜像: ghcr.io/cshdotcom/selkies-cloud-desktop （linux/amd64，
+#       Edge 与 zcode Linux CLI 均仅提供 x86_64）
+# =============================================================================
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ghcr.io/${{ github.repository }}
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 1) 源码静态校验：shell 语法 / YAML 语法 / compose 配置 / 目录结构
+  # ---------------------------------------------------------------------------
+  lint:
+    name: Lint sources
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Shell syntax check (bash -n)
+        run: |
+          set -e
+          fail=0
+          while IFS= read -r f; do
+            if bash -n "$f"; then echo "OK  $f"; else echo "FAIL $f"; fail=1; fi
+          done < <(find scripts rootfs -type f \( -name '*.sh' -o -name 'run' -o -name 'finish' -o -name 'desktop-init' \) | sort)
+          [ "$fail" -eq 0 ] || { echo "::error::shell syntax check failed"; exit 1; }
+
+      - name: YAML syntax check
+        run: |
+          python3 -c "import yaml" 2>/dev/null || python3 -m pip install --quiet pyyaml
+          python3 - <<'EOF'
+          import yaml
+          for f in ("docker-compose.yml", ".github/workflows/docker-build.yml"):
+              with open(f) as fh:
+                  yaml.safe_load(fh)
+              print("OK ", f)
+          EOF
+
+      - name: Compose config check
+        run: |
+          SELKIES_BASIC_AUTH_PASSWORD=ci-lint-value docker compose config --quiet && echo "OK  docker-compose.yml"
+
+      - name: Project structure check
+        run: |
+          set -e
+          test -f Dockerfile
+          test -f scripts/desktop-init
+          test -f rootfs/etc/service/desktop/run
+          test -f rootfs/etc/service/desktop/finish
+          test -f rootfs/etc/service/xsettingsd/run
+          test -f rootfs/etc/xdg/mimeapps.list
+          test -f rootfs/usr/local/share/applications/zcode.desktop
+          test -f .env.example
+          echo "OK  project structure"
+
+  # ---------------------------------------------------------------------------
+  # 2) 构建镜像并推送 GHCR（PR 仅构建不推送）
+  # ---------------------------------------------------------------------------
+  build:
+    name: Build & push image
+    needs: lint
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Docker meta (tags & labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,enable={{is_default_branch}}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build (and push) image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Summarize
+        if: github.event_name != 'pull_request'
+        run: |
+          echo "### 镜像已推送" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "${{ steps.meta.outputs.tags }}" | tr ' ' '\n' >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+  # ---------------------------------------------------------------------------
+  # 3) 打 v* 标签时创建 GitHub Release（自动生成变更说明）
+  # ---------------------------------------------------------------------------
+  release:
+    name: Create GitHub Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          body: |
+            ## Selkies Cloud Desktop ${{ github.ref_name }}
+
+            Ubuntu 26.04 LTS + XFCE lite 桌面 + Microsoft Edge + Z.ai ZCode CLI 的
+            Selkies WebRTC 云桌面（多人同时控制 / HTTP+HTTPS 双端口 / 数据持久化 / 2G 内存可运行）。
+
+            ### 拉取镜像
+
+            ```bash
+            docker pull ghcr.io/cshdotcom/selkies-cloud-desktop:${{ github.ref_name }}
+            ```
+
+            ### 快速启动
+
+            ```bash
+            docker run -d --name selkies-cloud-desktop \
+              --shm-size=512m --memory=2g \
+              -p 8080:8080 -p 8443:8443 -p 3478:3478/tcp -p 3478:3478/udp \
+              -e SELKIES_BASIC_AUTH_USER=admin \
+              -e SELKIES_BASIC_AUTH_PASSWORD=你的密码 \
+              -v selkies-home:/home/ubuntu \
+              ghcr.io/cshdotcom/selkies-cloud-desktop:${{ github.ref_name }}
+            ```
+
+            随后浏览器打开 `https://<主机>:8443`（自签证书）或 `http://<主机>:8080`。
+
+            完整文档（多人协作、持久化、zcode 配置、2G 调优）见仓库 [README](https://github.com/cshdotcom/selkies-cloud-desktop/blob/main/README.md)。

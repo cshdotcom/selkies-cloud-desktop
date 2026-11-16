@@ -1,0 +1,12 @@
+#!/bin/bash
+# =============================================================================
+# xsettingsd 服务停靠脚本（覆盖上游 base 的同名 run）
+#
+# XFCE 会话自带 xfce4-settings-daemon（XSETTINGS 管理器），与 xsettingsd
+# 会争抢 _XSETTINGS_S0 selection。本镜像使用完整 XFCE 桌面，故将上游的
+# xsettingsd 服务停靠，避免 DPI/主题设置来回跳变。
+# =============================================================================
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/runtime-ubuntu}"
+until [ -f "${XDG_RUNTIME_DIR}/container-env" ]; do sleep 0.5; done
+echo "[xsettingsd] parked: xfce4-settings-daemon owns XSETTINGS in the XFCE session"
+exec sleep infinity

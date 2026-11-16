@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<channel name="xfwm4" version="1.0">
+  <property name="general" type="empty">
+    <!-- 2G 内存优化：关闭窗口合成器（Xvfb 上无透明/阴影收益，省 CPU+内存） -->
+    <property name="use_compositing" type="bool" value="false"/>
+    <!-- 平铺窗口时避免抢占屏幕边缘误触发 -->
+    <property name="wrap_workspaces" type="bool" value="false"/>
+  </property>
+</channel>

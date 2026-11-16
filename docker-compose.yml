@@ -1,0 +1,77 @@
+# =============================================================================
+# Selkies Cloud Desktop — 部署模板（2G 内存版默认配置）
+#
+#   cp .env.example .env   （或直接导出环境变量），然后：
+#   docker compose up -d
+#
+# 访问：
+#   HTTP  http://<主机>:8080     （浏览器弹窗输入用户名+密码登录）
+#   HTTPS https://<主机>:8443     （自签证书，首次需在浏览器接受）
+# =============================================================================
+
+services:
+  selkies-cloud-desktop:
+    image: ghcr.io/cshdotcom/selkies-cloud-desktop:latest
+    # 本地自行构建时改用：
+    # build: .
+    container_name: selkies-cloud-desktop
+    restart: unless-stopped
+    stdin_open: true
+    tty: true
+
+    # —— 2G 内存版资源约束 ——
+    mem_limit: "2g"
+    # Edge 渲染需要比 Docker 默认 64MB 更大的 /dev/shm（镜像内已加
+    # --disable-dev-shm-usage 启动参数，512m 已足够宽裕）
+    shm_size: "512m"
+
+    ports:
+      - "8080:8080"        # HTTP  （登录后即云桌面）
+      - "8443:8443"        # HTTPS （自签证书，双端口同时开放）
+      - "3478:3478"        # 内置 coTURN —— WebRTC 跨 NAT 中继（tcp）
+      - "3478:3478/udp"    # 内置 coTURN（udp）
+
+    environment:
+      TZ: "${TZ:-Asia/Shanghai}"
+
+      # —— Web 登录：自定义用户名 + 密码（浏览器 BasicAuth 弹窗输入）——
+      SELKIES_ENABLE_BASIC_AUTH: "true"
+      SELKIES_BASIC_AUTH_USER: "${SELKIES_BASIC_AUTH_USER:-admin}"
+      SELKIES_BASIC_AUTH_PASSWORD: "${SELKIES_BASIC_AUTH_PASSWORD:?请在 .env 或环境变量中设置 SELKIES_BASIC_AUTH_PASSWORD}"
+      # 可选：只读观看密码 —— 用这个密码登录的人只能看、不能操作
+      # （不设则所有登录者都是完整控制权限）
+      SELKIES_BASIC_AUTH_VIEWONLY_PASSWORD: "${SELKIES_BASIC_AUTH_VIEWONLY_PASSWORD:-}"
+
+      # —— 桌面账户密码（容器内 sudo / 会话账户，与 Web 登录相互独立）——
+      PASSWD: "${PASSWD:-mypasswd}"
+
+      # —— 流参数（2G 内存 / 小核 VPS 均衡默认，可自行调整）——
+      SELKIES_FRAMERATE: "${SELKIES_FRAMERATE:-30,8-60}"
+      SELKIES_VIDEO_BITRATE: "${SELKIES_VIDEO_BITRATE:-6000,1000-16000}"
+      # 初始分辨率（客户端连上后默认随浏览器窗口动态自适应）
+      DISPLAY_SIZEW: "${DISPLAY_SIZEW:-1600}"
+      DISPLAY_SIZEH: "${DISPLAY_SIZEH:-900}"
+
+      # —— zcode (Z.ai)：可直接带 API Key 启动，跳过终端里的 /login ——
+      # ZCODE_MODEL: "zai/glm-4.6"
+      # ZCODE_BASE_URL: "https://api.z.ai/api/anthropic"
+      # ANTHROPIC_API_KEY: "sk-你的Z.ai-Key"
+
+    volumes:
+      # 常规目录：整个家目录（桌面/文档/下载/图片/音乐 + 各类应用 dotfiles）
+      - home:/home/ubuntu
+      # Edge 软件目录：配置（书签/密码/扩展/登录态）+ 缓存，独立成卷
+      - edge-config:/home/ubuntu/.config/microsoft-edge
+      - edge-cache:/home/ubuntu/.cache/microsoft-edge
+      # zcode 专属目录：认证、会话与插件配置
+      - zcode-data:/home/ubuntu/.zcode
+
+    # GPU 直通（可选；无 GPU 时保持注释即可，软编 x264 已足够日常办公）
+    # devices:
+    #   - /dev/dri:/dev/dri
+
+volumes:
+  home:
+  edge-config:
+  edge-cache:
+  zcode-data:

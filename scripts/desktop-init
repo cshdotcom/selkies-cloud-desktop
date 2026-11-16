@@ -1,0 +1,63 @@
+#!/bin/bash
+# =============================================================================
+# selkies-cloud-desktop ENTRYPOINT 包装
+#
+# 职责（在交接给上游 /etc/container-entrypoint.sh 之前）：
+#   1. 首次开机：把 /etc/skel 家目录模板（XFCE 关合成器等优化）铺进 $HOME
+#   2. 建全常规目录（桌面/文档/下载/图片/音乐/视频）
+#   3. 确保持久化挂载点存在（Edge 配置/缓存、zcode 专属目录）
+#   4. 修复数据卷属主（bind mount 场景，best-effort 通过 sudo-root chown）
+#
+# 持久化布局（docker-compose.yml 中的卷）：
+#   /home/ubuntu                       ← 常规目录（整个家目录）
+#   /home/ubuntu/.config/microsoft-edge ← Edge 配置（书签/密码/扩展/登录态）
+#   /home/ubuntu/.cache/microsoft-edge  ← Edge 缓存
+#   /home/ubuntu/.zcode                 ← zcode 专属目录（认证/会话/插件配置）
+# =============================================================================
+set -e
+
+export HOME="${HOME:-/home/ubuntu}"
+MARKER="${HOME}/.config/.selkies-cloud-desktop"
+PERSIST_DIRS="
+${HOME}/.config/microsoft-edge
+${HOME}/.cache/microsoft-edge
+${HOME}/.zcode
+"
+
+mkdir -p "${HOME}/.config" 2>/dev/null || true
+
+# ---- 1) 首次开机：铺家目录模板 ----
+if [ ! -e "${MARKER}" ]; then
+  echo "[desktop-init] first boot: seeding \$HOME from /etc/skel"
+  cp -a /etc/skel/. "${HOME}/" 2>/dev/null || true
+fi
+
+# ---- 2) 常规目录 ----
+for d in Desktop Documents Downloads Pictures Music Videos; do
+  mkdir -p "${HOME}/${d}" 2>/dev/null || true
+done
+
+# ---- 3) 持久化挂载点 ----
+for d in ${PERSIST_DIRS}; do
+  mkdir -p "${d}" 2>/dev/null || true
+done
+
+touch "${MARKER}" 2>/dev/null || true
+
+# ---- 4) 卷属主修复（bind mount 未 chown 1000:1000 时的兜底） ----
+if command -v sudo-root >/dev/null 2>&1; then
+  need_fix=""
+  for d in "${HOME}" ${PERSIST_DIRS}; do
+    if [ -d "${d}" ] && [ ! -O "${d}" ]; then
+      need_fix="1"
+      break
+    fi
+  done
+  if [ -n "${need_fix}" ]; then
+    echo "[desktop-init] fixing ownership of \$HOME (bind-mounted volumes)"
+    sudo-root chown -R "$(id -u):$(id -g)" "${HOME}" 2>/dev/null || true
+  fi
+fi
+
+# ---- 交接给上游 base 的容器入口（s6 服务监督 + Selkies 服务器） ----
+exec /etc/container-entrypoint.sh "$@"

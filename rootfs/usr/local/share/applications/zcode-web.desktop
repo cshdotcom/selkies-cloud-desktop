@@ -1,0 +1,13 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=ZCode Web
+Name[zh_CN]=ZCode Web 界面
+Comment=Z.ai ZCode local web server and agent (opens in Edge)
+Comment[zh_CN]=Z.ai ZCode 本地 Web 服务与 Agent（在 Edge 中打开）
+Exec=xfce4-terminal --title="ZCode Web" -x zcode --web
+Icon=internet-web-browser
+Terminal=false
+Categories=Development;Network;
+StartupNotify=true
+X-XFCE-Source=/usr/local/share/applications/zcode-web.desktop

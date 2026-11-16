@@ -1,0 +1,12 @@
+.git
+.github
+.gitignore
+.dockerignore
+docs
+data
+*.md
+docker-compose.yml
+.env
+.env.example
+*.log
+.DS_Store

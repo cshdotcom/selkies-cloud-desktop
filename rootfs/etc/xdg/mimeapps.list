@@ -1,0 +1,7 @@
+[Default Applications]
+x-scheme-handler/http=microsoft-edge.desktop
+x-scheme-handler/https=microsoft-edge.desktop
+x-scheme-handler/ftp=microsoft-edge.desktop
+text/html=microsoft-edge.desktop
+application/xhtml+xml=microsoft-edge.desktop
+x-scheme-handler/about=microsoft-edge.desktop
